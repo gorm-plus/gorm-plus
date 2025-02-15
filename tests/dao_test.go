@@ -24,6 +24,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -32,9 +33,12 @@ import (
 
 var gormDb *gorm.DB
 var gormDbConnName = "test1"
+var dbAddress = "127.0.0.1:3306"
+var dbUser = "root"
+var dbPassword = "123456"
 
 func init() {
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/test?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbAddress)
 	var err error
 	gormDb, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -49,7 +53,7 @@ func init() {
 }
 
 func initDb() {
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test1?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/test1?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbAddress)
 	var err error
 	gormDb1, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -745,6 +749,14 @@ func TestSelectGeneric6BaseName(t *testing.T) {
 	if resultDb.Error != nil {
 		t.Errorf("errors happened when resultDb : %v", resultDb.Error)
 	}
+}
+
+func TestQueryByIdBaseDb(t *testing.T) {
+	opt := gplus.DbBaseName(gormDbConnName)
+	values := url.Values{}
+	values["q"] = []string{"id=1"}
+	query := gplus.BuildQueryBaseDb[User](values, opt)
+	gplus.SelectList[User](query, opt)
 }
 
 func deleteOldData() {

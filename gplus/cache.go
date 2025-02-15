@@ -147,10 +147,14 @@ func getColumnName(v any) string {
 
 func getDefaultDbConnName() string {
 	dbConnName := constants.DefaultGormPlusConnName
-	//如果用户没传数据库连接名称,优先从全局globalDbKeys里获取第一个连接名
-	//避免用户使用InitDb方法初始化数据库 自定义数据库连接名，然后方法里不传是哪个数据库连接名 则只能默认取第一条
-	if len(globalDbKeys) >= 1 {
-		dbConnName = globalDbKeys[0]
+	//如果用户没传数据库连接名称,优先判断全局自定义的连接名是否存在，
+	//如果上面不存在其次从全局globalDbKeys里获取第一个连接名
+	//1.避免用户使用InitDb方法初始化数据库 自定义数据库连接名 ，然后方法里不传是哪个数据库连接名 则只能默认取第一条
+	//2.再混用单库Init取初始化，做方法兼容
+	_, exists := globalDbMap[dbConnName]
+	if exists {
+		return dbConnName
 	}
+	dbConnName = globalDbKeys[0]
 	return dbConnName
 }

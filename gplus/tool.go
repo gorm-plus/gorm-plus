@@ -56,16 +56,18 @@ var builders = map[string]func(query *QueryCond[any], name string, value any){
 }
 
 func BuildQuery[T any](queryParams url.Values) *QueryCond[T] {
-	return BuildQueryBaseDb[T](queryParams, "")
+	dbConnName := getDefaultDbConnName()
+	return BuildQueryBaseDb[T](queryParams, DbBaseName(dbConnName))
 }
 
-func BuildQueryBaseDb[T any](queryParams url.Values, dbConnName string) *QueryCond[T] {
+func BuildQueryBaseDb[T any](queryParams url.Values, opt OptionFunc) *QueryCond[T] {
 
 	columnCondMap, conditionMap, gcond := parseParams(queryParams)
 
 	parentQuery := buildParentQuery[T](conditionMap)
 
-	queryCondMap := buildQueryCondMap[T](columnCondMap, dbConnName)
+	option := getOneOption(opt)
+	queryCondMap := buildQueryCondMap[T](columnCondMap, option.DbConnName)
 
 	// 如果没有分组条件，直接返回默认的查询条件
 	if len(gcond) == 0 {
