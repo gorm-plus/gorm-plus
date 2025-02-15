@@ -722,9 +722,9 @@ func TestSelectGeneric6BaseName(t *testing.T) {
 		userMap[user.Dept] += user.Score
 	}
 	query, u := gplus.NewQueryBaseDb[User](opt)
-	uvo := gplus.GetModelBaseDb[UserVo](gormDbConnName)
+	uvo := gplus.GetModelBaseDb[UserVo](opt)
 	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
-	UserVos, resultDb := gplus.SelectGeneric[User, []UserVo](query, gplus.DbBaseName(gormDbConnName))
+	UserVos, resultDb := gplus.SelectGeneric[User, []UserVo](query, opt)
 
 	if resultDb.Error != nil {
 		t.Errorf("errors happened when resultDb : %v", resultDb.Error)
@@ -735,6 +735,15 @@ func TestSelectGeneric6BaseName(t *testing.T) {
 		if userVo.Score != score {
 			t.Errorf("errors happened when SelectGeneric")
 		}
+	}
+	//如果还是使用旧有的方法测试
+	query, u = gplus.NewQuery[User]()
+	uvo = gplus.GetModel[UserVo]()
+	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
+	UserVos, resultDb = gplus.SelectGeneric[User, []UserVo](query, opt)
+
+	if resultDb.Error != nil {
+		t.Errorf("errors happened when resultDb : %v", resultDb.Error)
 	}
 }
 

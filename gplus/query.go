@@ -47,7 +47,8 @@ func (q *QueryCond[T]) getSqlSegment() string {
 
 // NewQuery 构建查询条件
 func NewQuery[T any]() (*QueryCond[T], *T) {
-	return NewQueryBaseDb[T](DbBaseName(constants.DefaultGormPlusConnName))
+	dbConnName := getDefaultDbConnName()
+	return NewQueryBaseDb[T](DbBaseName(dbConnName))
 }
 
 // NewQueryBaseDb 构建查询条件

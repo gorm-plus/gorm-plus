@@ -30,6 +30,7 @@ import (
 )
 
 var globalDbMap = make(map[string]*gorm.DB)
+var globalDbKeys []string
 var defaultBatchSize = 1000
 
 func Init(db *gorm.DB) {
@@ -44,6 +45,7 @@ func InitDb(db *gorm.DB, dbConnName string) error {
 	if !exists {
 		// db instance register to global variable
 		globalDbMap[dbConnName] = db
+		globalDbKeys = append(globalDbKeys, dbConnName)
 		return nil
 	}
 	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")

@@ -69,11 +69,12 @@ func getColumnNameMap(model any, dbConnName string) map[uintptr]string {
 
 // GetModel 获取
 func GetModel[T any]() *T {
-	return GetModelBaseDb[T]("")
+	dbConnName := getDefaultDbConnName()
+	return GetModelBaseDb[T](DbBaseName(dbConnName))
 }
 
 // GetModelBaseDb 获取根据数据库连接名
-func GetModelBaseDb[T any](dbConnName string) *T {
+func GetModelBaseDb[T any](opt OptionFunc) *T {
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
 		m, isReal := model.(*T)
@@ -82,7 +83,8 @@ func GetModelBaseDb[T any](dbConnName string) *T {
 		}
 	}
 	t := new(T)
-	Cache(dbConnName, t)
+	option := getOneOption(opt)
+	Cache(option.DbConnName, t)
 	return t
 }
 
@@ -118,7 +120,7 @@ func parseColumnName(field reflect.StructField, dbConnName string) string {
 		return name
 	}
 	if len(dbConnName) == 0 {
-		dbConnName = constants.DefaultGormPlusConnName
+		dbConnName = getDefaultDbConnName()
 	}
 	db, _ := GetDb(dbConnName)
 	return db.Config.NamingStrategy.ColumnName("", field.Name)
@@ -141,4 +143,14 @@ func getColumnName(v any) string {
 		}
 	}
 	return columnName
+}
+
+func getDefaultDbConnName() string {
+	dbConnName := constants.DefaultGormPlusConnName
+	//如果用户没传数据库连接名称,优先从全局globalDbKeys里获取第一个连接名
+	//避免用户使用InitDb方法初始化数据库 自定义数据库连接名，然后方法里不传是哪个数据库连接名 则只能默认取第一条
+	if len(globalDbKeys) >= 1 {
+		dbConnName = globalDbKeys[0]
+	}
+	return dbConnName
 }
