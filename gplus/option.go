@@ -17,13 +17,17 @@
 
 package gplus
 
-import "gorm.io/gorm"
+import (
+	"github.com/acmestack/gorm-plus/constants"
+	"gorm.io/gorm"
+)
 
 type Option struct {
 	Db          *gorm.DB
 	Selects     []any
 	Omits       []any
 	IgnoreTotal bool
+	DbConnName  string
 }
 
 type OptionFunc func(*Option)
@@ -35,10 +39,12 @@ func Db(db *gorm.DB) OptionFunc {
 	}
 }
 
-// Session 创建回话
+// Session 创建会话
 func Session(session *gorm.Session) OptionFunc {
 	return func(o *Option) {
-		o.Db = globalDb.Session(session)
+		//兼容之前的设计
+		db, _ := GetDb(constants.DefaultGormPlusConnName)
+		o.Db = db.Session(session)
 	}
 }
 
@@ -60,5 +66,29 @@ func Omit(columns ...any) OptionFunc {
 func IgnoreTotal() OptionFunc {
 	return func(o *Option) {
 		o.IgnoreTotal = true
+	}
+}
+
+// DbConnName 多个数据库连接根据自定义连接名称选择切换
+func DbConnName(dbConnName string) OptionFunc {
+	return func(o *Option) {
+		o.DbConnName = dbConnName
+	}
+}
+
+// DbSessionBaseName 创建特定的Db会话
+func DbSessionBaseName(dbConnName string, session *gorm.Session) OptionFunc {
+	return func(o *Option) {
+		o.DbConnName = dbConnName
+		db, _ := GetDb(dbConnName)
+		o.Db = db.Session(session)
+	}
+}
+
+// DbBaseName 使用特定的Db对象
+func DbBaseName(dbConnName string) OptionFunc {
+	return func(o *Option) {
+		o.DbConnName = dbConnName
+		o.Db, _ = GetDb(dbConnName)
 	}
 }

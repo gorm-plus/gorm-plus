@@ -47,6 +47,11 @@ func (q *QueryCond[T]) getSqlSegment() string {
 
 // NewQuery 构建查询条件
 func NewQuery[T any]() (*QueryCond[T], *T) {
+	return NewQueryBaseDb[T](DbBaseName(constants.DefaultGormPlusConnName))
+}
+
+// NewQueryBaseDb 构建查询条件
+func NewQueryBaseDb[T any](opt OptionFunc) (*QueryCond[T], *T) {
 	q := &QueryCond[T]{}
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
@@ -56,12 +61,18 @@ func NewQuery[T any]() (*QueryCond[T], *T) {
 		}
 	}
 	m := new(T)
-	Cache(m)
+	option := getOneOption(opt)
+	Cache(option.DbConnName, m)
 	return q, m
 }
 
 // NewQueryModel 构建查询条件
 func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
+	return NewQueryModelBaseDb[T, R]("")
+}
+
+// NewQueryModelBaseDb 构建查询条件
+func NewQueryModelBaseDb[T any, R any](dbConnName string) (*QueryCond[T], *T, *R) {
 	q := &QueryCond[T]{}
 	var t *T
 	var r *R
@@ -83,12 +94,12 @@ func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
 
 	if t == nil {
 		t = new(T)
-		Cache(t)
+		Cache(dbConnName, t)
 	}
 
 	if r == nil {
 		r = new(R)
-		Cache(r)
+		Cache(dbConnName, r)
 	}
 
 	return q, t, r

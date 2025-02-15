@@ -18,6 +18,7 @@ package gplus
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/acmestack/gorm-plus/constants"
 	"gorm.io/gorm"
@@ -28,11 +29,33 @@ import (
 	"time"
 )
 
-var globalDb *gorm.DB
+var globalDbMap = make(map[string]*gorm.DB)
 var defaultBatchSize = 1000
 
 func Init(db *gorm.DB) {
-	globalDb = db
+	InitDb(db, constants.DefaultGormPlusConnName)
+}
+
+func InitDb(db *gorm.DB, dbConnName string) error {
+	if len(dbConnName) == 0 {
+		return errors.New("InitMultiple dbConnName is empty please check")
+	}
+	_, exists := globalDbMap[dbConnName]
+	if !exists {
+		// db instance register to global variable
+		globalDbMap[dbConnName] = db
+		return nil
+	}
+	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")
+}
+
+// GetDb 获取数据库连接
+func GetDb(dbConnName string) (*gorm.DB, error) {
+	db, exists := globalDbMap[dbConnName]
+	if exists {
+		return db, nil
+	}
+	return nil, errors.New("MultipleDbChange not exists dbConn:" + dbConnName + ",please check")
 }
 
 type Page[T any] struct {
@@ -47,6 +70,10 @@ type Dao[T any] struct{}
 
 func (dao Dao[T]) NewQuery() (*QueryCond[T], *T) {
 	return NewQuery[T]()
+}
+
+func (dao Dao[T]) NewQueryBaseDb(opt OptionFunc) (*QueryCond[T], *T) {
+	return NewQueryBaseDb[T](opt)
 }
 
 func NewPage[T any](current, size int) *Page[T] {
@@ -157,7 +184,7 @@ func UpdateZeroById[T any](entity *T, opts ...OptionFunc) *gorm.DB {
 func updateAllIfNeed(entity any, opts []OptionFunc, db *gorm.DB) {
 	option := getOption(opts)
 	if len(option.Selects) == 0 {
-		columnNameMap := getColumnNameMap(entity)
+		columnNameMap := getColumnNameMap(entity, option.DbConnName)
 		var columnNames []string
 		for _, columnName := range columnNameMap {
 			columnNames = append(columnNames, columnName)
@@ -449,12 +476,19 @@ func buildSqlAndArgs[T any](expressions []any, sqlBuilder *strings.Builder, quer
 }
 
 func getDb(opts ...OptionFunc) *gorm.DB {
+	var db *gorm.DB
 	option := getOption(opts)
-	// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
-	var db = globalDb.Clauses()
 
 	if option.Db != nil {
 		db = option.Db.Clauses()
+	} else {
+		if len(option.DbConnName) == 0 {
+			option.DbConnName = constants.DefaultGormPlusConnName
+		}
+
+		db, _ = GetDb(option.DbConnName)
+		// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
+		db = db.Clauses()
 	}
 
 	// 设置需要忽略的字段
@@ -471,6 +505,12 @@ func getOption(opts []OptionFunc) Option {
 	for _, op := range opts {
 		op(&config)
 	}
+	return config
+}
+
+func getOneOption(opt OptionFunc) Option {
+	var config Option
+	opt(&config)
 	return config
 }
 

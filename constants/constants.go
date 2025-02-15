@@ -18,8 +18,9 @@
 package constants
 
 const (
-	Comma              = ","
-	LeftBracket        = "("
-	RightBracket       = ")"
-	DefaultPrimaryName = "id"
+	Comma                   = ","
+	LeftBracket             = "("
+	RightBracket            = ")"
+	DefaultPrimaryName      = "id"
+	DefaultGormPlusConnName = "DefaultGormPlusConnName" //内置的gorm-plus 数据库连接名
 )
