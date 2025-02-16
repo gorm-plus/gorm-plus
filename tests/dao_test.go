@@ -725,6 +725,7 @@ func TestSelectGeneric6BaseDb(t *testing.T) {
 	for _, user := range users {
 		userMap[user.Dept] += user.Score
 	}
+	//测试NewQueryBaseDb和GetModelBaseDb
 	query, u := gplus.NewQueryBaseDb[User](opt)
 	uvo := gplus.GetModelBaseDb[UserVo](opt)
 	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
@@ -740,6 +741,18 @@ func TestSelectGeneric6BaseDb(t *testing.T) {
 			t.Errorf("errors happened when SelectGeneric")
 		}
 	}
+
+	//测试NewQueryModelBaseDb
+	type UserV1 struct {
+		Name string
+		Age  int64
+	}
+	query, user, userV1 := gplus.NewQueryModelBaseDb[User, UserV1](opt)
+	query.Eq(&user.Username, "afumu").And(func(q *gplus.QueryCond[User]) {
+		q.Eq(&user.Address, "北京").Or().Eq(&user.Age, 20)
+	}).Select(gplus.As(&user.Username, &userV1.Name), &user.Age)
+	gplus.SelectGeneric[User, []UserV1](query, opt)
+
 	//如果还是使用旧有的方法测试
 	query, u = gplus.NewQuery[User]()
 	uvo = gplus.GetModel[UserVo]()

@@ -186,7 +186,7 @@ func UpdateZeroById[T any](entity *T, opts ...OptionFunc) *gorm.DB {
 func updateAllIfNeed(entity any, opts []OptionFunc, db *gorm.DB) {
 	option := getOption(opts)
 	if len(option.Selects) == 0 {
-		columnNameMap := getColumnNameMap(entity, option.DbConnName)
+		columnNameMap := getColumnNameMap(entity, db.Config.NamingStrategy)
 		var columnNames []string
 		for _, columnName := range columnNameMap {
 			columnNames = append(columnNames, columnName)
@@ -484,10 +484,7 @@ func getDb(opts ...OptionFunc) *gorm.DB {
 	if option.Db != nil {
 		db = option.Db
 	} else {
-		if len(option.DbConnName) == 0 {
-			option.DbConnName = getDefaultDbConnName()
-		}
-		db, _ = GetDb(option.DbConnName)
+		db, option.DbConnName, _ = getDefaultDbByName(option.DbConnName)
 	}
 
 	//设置session,如果需要子句仅在当前会话生效，先调用 Session()，再调用 Clauses()。
@@ -570,4 +567,35 @@ func getPkColumnName[T any]() string {
 		return constants.DefaultPrimaryName
 	}
 	return columnName
+}
+
+func getDefaultDbConnName() string {
+	dbConnName := constants.DefaultGormPlusConnName
+	//如果用户没传数据库连接名称,优先判断全局自定义的连接名是否存在，
+	//如果上面不存在其次从全局globalDbKeys里获取第一个连接名
+	//1.避免用户使用InitDb方法初始化数据库 自定义数据库连接名 ，然后方法里不传是哪个数据库连接名 则只能默认取第一条
+	//2.再混用单库Init取初始化，做方法兼容
+	_, exists := globalDbMap[dbConnName]
+	if exists {
+		return dbConnName
+	}
+	dbConnName = globalDbKeys[0]
+	return dbConnName
+}
+
+func getDefaultDbByOpt(opt OptionFunc) (*gorm.DB, string, error) {
+	option := getOneOption(opt)
+	if len(option.DbConnName) == 0 {
+		option.DbConnName = getDefaultDbConnName()
+	}
+	db, err := GetDb(option.DbConnName)
+	return db, option.DbConnName, err
+}
+
+func getDefaultDbByName(dbConnName string) (*gorm.DB, string, error) {
+	if len(dbConnName) == 0 {
+		dbConnName = getDefaultDbConnName()
+	}
+	db, err := GetDb(dbConnName)
+	return db, dbConnName, err
 }

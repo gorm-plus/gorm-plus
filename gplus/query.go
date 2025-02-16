@@ -62,18 +62,18 @@ func NewQueryBaseDb[T any](opt OptionFunc) (*QueryCond[T], *T) {
 		}
 	}
 	m := new(T)
-	option := getOneOption(opt)
-	Cache(option.DbConnName, m)
+	Cache(opt, m)
 	return q, m
 }
 
 // NewQueryModel 构建查询条件
 func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
-	return NewQueryModelBaseDb[T, R]("")
+	dbConnName := getDefaultDbConnName() //兼容之前设计
+	return NewQueryModelBaseDb[T, R](DbConnName(dbConnName))
 }
 
 // NewQueryModelBaseDb 构建查询条件
-func NewQueryModelBaseDb[T any, R any](dbConnName string) (*QueryCond[T], *T, *R) {
+func NewQueryModelBaseDb[T any, R any](opt OptionFunc) (*QueryCond[T], *T, *R) {
 	q := &QueryCond[T]{}
 	var t *T
 	var r *R
@@ -95,12 +95,12 @@ func NewQueryModelBaseDb[T any, R any](dbConnName string) (*QueryCond[T], *T, *R
 
 	if t == nil {
 		t = new(T)
-		Cache(dbConnName, t)
+		Cache(opt, t)
 	}
 
 	if r == nil {
 		r = new(R)
-		Cache(dbConnName, r)
+		Cache(opt, r)
 	}
 
 	return q, t, r

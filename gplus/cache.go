@@ -18,7 +18,6 @@
 package gplus
 
 import (
-	"github.com/acmestack/gorm-plus/constants"
 	"gorm.io/gorm/schema"
 	"reflect"
 	"sync"
@@ -32,9 +31,10 @@ var columnNameCache sync.Map
 var modelInstanceCache sync.Map
 
 // Cache 缓存实体对象所有的字段名
-func Cache(dbConnName string, models ...any) {
+func Cache(opt OptionFunc, models ...any) {
+	db, _, _ := getDefaultDbByOpt(opt)
 	for _, model := range models {
-		columnNameMap := getColumnNameMap(model, dbConnName)
+		columnNameMap := getColumnNameMap(model, db.Config.NamingStrategy)
 		for pointer, columnName := range columnNameMap {
 			columnNameCache.Store(pointer, columnName)
 		}
@@ -44,7 +44,7 @@ func Cache(dbConnName string, models ...any) {
 	}
 }
 
-func getColumnNameMap(model any, dbConnName string) map[uintptr]string {
+func getColumnNameMap(model any, namingStrategy schema.Namer) map[uintptr]string {
 	var columnNameMap = make(map[uintptr]string)
 	valueOf := reflect.ValueOf(model).Elem()
 	typeOf := reflect.TypeOf(model).Elem()
@@ -53,14 +53,14 @@ func getColumnNameMap(model any, dbConnName string) map[uintptr]string {
 		// 如果当前实体嵌入了其他实体，同样需要缓存它的字段名
 		if field.Anonymous {
 			// 如果存在多重嵌套，通过递归方式获取他们的字段名
-			subFieldMap := getSubFieldColumnNameMap(valueOf, field, dbConnName)
+			subFieldMap := getSubFieldColumnNameMap(valueOf, field, namingStrategy)
 			for pointer, columnName := range subFieldMap {
 				columnNameMap[pointer] = columnName
 			}
 		} else {
 			// 获取对象字段指针值
 			pointer := valueOf.Field(i).Addr().Pointer()
-			columnName := parseColumnName(field, dbConnName)
+			columnName := parseColumnName(field, namingStrategy)
 			columnNameMap[pointer] = columnName
 		}
 	}
@@ -83,13 +83,12 @@ func GetModelBaseDb[T any](opt OptionFunc) *T {
 		}
 	}
 	t := new(T)
-	option := getOneOption(opt)
-	Cache(option.DbConnName, t)
+	Cache(opt, t)
 	return t
 }
 
 // 递归获取嵌套字段名
-func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, dbConnName string) map[uintptr]string {
+func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, namingStrategy schema.Namer) map[uintptr]string {
 	result := make(map[uintptr]string)
 	modelType := field.Type
 	if modelType.Kind() == reflect.Ptr {
@@ -98,13 +97,13 @@ func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, 
 	for j := 0; j < modelType.NumField(); j++ {
 		subField := modelType.Field(j)
 		if subField.Anonymous {
-			nestedFields := getSubFieldColumnNameMap(valueOf, subField, dbConnName)
+			nestedFields := getSubFieldColumnNameMap(valueOf, subField, namingStrategy)
 			for key, value := range nestedFields {
 				result[key] = value
 			}
 		} else {
 			pointer := valueOf.FieldByName(modelType.Field(j).Name).Addr().Pointer()
-			name := parseColumnName(modelType.Field(j), dbConnName)
+			name := parseColumnName(modelType.Field(j), namingStrategy)
 			result[pointer] = name
 		}
 	}
@@ -113,17 +112,13 @@ func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, 
 }
 
 // 解析字段名称 兼容多数据库切换
-func parseColumnName(field reflect.StructField, dbConnName string) string {
+func parseColumnName(field reflect.StructField, namingStrategy schema.Namer) string {
 	tagSetting := schema.ParseTagSetting(field.Tag.Get("gorm"), ";")
 	name, ok := tagSetting["COLUMN"]
 	if ok {
 		return name
 	}
-	if len(dbConnName) == 0 {
-		dbConnName = getDefaultDbConnName()
-	}
-	db, _ := GetDb(dbConnName)
-	return db.Config.NamingStrategy.ColumnName("", field.Name)
+	return namingStrategy.ColumnName("", field.Name)
 }
 
 func getColumnName(v any) string {
@@ -143,18 +138,4 @@ func getColumnName(v any) string {
 		}
 	}
 	return columnName
-}
-
-func getDefaultDbConnName() string {
-	dbConnName := constants.DefaultGormPlusConnName
-	//如果用户没传数据库连接名称,优先判断全局自定义的连接名是否存在，
-	//如果上面不存在其次从全局globalDbKeys里获取第一个连接名
-	//1.避免用户使用InitDb方法初始化数据库 自定义数据库连接名 ，然后方法里不传是哪个数据库连接名 则只能默认取第一条
-	//2.再混用单库Init取初始化，做方法兼容
-	_, exists := globalDbMap[dbConnName]
-	if exists {
-		return dbConnName
-	}
-	dbConnName = globalDbKeys[0]
-	return dbConnName
 }
