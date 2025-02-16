@@ -18,7 +18,6 @@
 package gplus
 
 import (
-	"github.com/acmestack/gorm-plus/constants"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +27,7 @@ type Option struct {
 	Omits       []any
 	IgnoreTotal bool
 	DbConnName  string
+	DbSession   *gorm.Session
 }
 
 type OptionFunc func(*Option)
@@ -42,9 +42,7 @@ func Db(db *gorm.DB) OptionFunc {
 // Session 创建会话
 func Session(session *gorm.Session) OptionFunc {
 	return func(o *Option) {
-		//兼容之前的设计
-		db, _ := GetDb(constants.DefaultGormPlusConnName)
-		o.Db = db.Session(session)
+		o.DbSession = session //调整session 在dao类的getDb方法那边处理
 	}
 }
 
@@ -73,22 +71,5 @@ func IgnoreTotal() OptionFunc {
 func DbConnName(dbConnName string) OptionFunc {
 	return func(o *Option) {
 		o.DbConnName = dbConnName
-	}
-}
-
-// DbSessionBaseName 创建特定的Db会话
-func DbSessionBaseName(dbConnName string, session *gorm.Session) OptionFunc {
-	return func(o *Option) {
-		o.DbConnName = dbConnName
-		db, _ := GetDb(dbConnName)
-		o.Db = db.Session(session)
-	}
-}
-
-// DbBaseName 使用特定的Db对象
-func DbBaseName(dbConnName string) OptionFunc {
-	return func(o *Option) {
-		o.DbConnName = dbConnName
-		o.Db, _ = GetDb(dbConnName)
 	}
 }

@@ -70,7 +70,7 @@ func getColumnNameMap(model any, dbConnName string) map[uintptr]string {
 // GetModel 获取
 func GetModel[T any]() *T {
 	dbConnName := getDefaultDbConnName()
-	return GetModelBaseDb[T](DbBaseName(dbConnName))
+	return GetModelBaseDb[T](DbConnName(dbConnName))
 }
 
 // GetModelBaseDb 获取根据数据库连接名

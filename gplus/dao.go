@@ -482,16 +482,19 @@ func getDb(opts ...OptionFunc) *gorm.DB {
 	option := getOption(opts)
 
 	if option.Db != nil {
-		db = option.Db.Clauses()
+		db = option.Db
 	} else {
 		if len(option.DbConnName) == 0 {
-			option.DbConnName = constants.DefaultGormPlusConnName
+			option.DbConnName = getDefaultDbConnName()
 		}
-
 		db, _ = GetDb(option.DbConnName)
-		// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
-		db = db.Clauses()
 	}
+
+	//设置session,如果需要子句仅在当前会话生效，先调用 Session()，再调用 Clauses()。
+	setSessionIfNeed(option, db)
+
+	// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
+	db = db.Clauses()
 
 	// 设置需要忽略的字段
 	setOmitIfNeed(option, db)
@@ -535,6 +538,12 @@ func setOmitIfNeed(option Option, db *gorm.DB) {
 			columnNames = append(columnNames, columnName)
 		}
 		db.Omit(columnNames...)
+	}
+}
+
+func setSessionIfNeed(option Option, db *gorm.DB) {
+	if option.DbSession != nil {
+		db.Session(option.DbSession)
 	}
 }
 

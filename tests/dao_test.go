@@ -613,7 +613,7 @@ func TestInsertBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 
 	user := &User{Username: "afumu", Password: "123456", Age: 18, Score: 100, Dept: "开发部门"}
-	resultDb := gplus.Insert(user, gplus.DbBaseName(gormDbConnName))
+	resultDb := gplus.Insert(user, gplus.DbConnName(gormDbConnName))
 
 	if resultDb.Error != nil {
 		t.Fatalf("errors happened when insert: %v", resultDb.Error)
@@ -621,7 +621,7 @@ func TestInsertBaseDb(t *testing.T) {
 		t.Fatalf("rows affected expects: %v, got %v", 1, resultDb.RowsAffected)
 	}
 
-	newUser, db := gplus.SelectById[User](user.ID, gplus.DbBaseName(gormDbConnName))
+	newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
 	if db.Error != nil {
 		t.Fatalf("errors happened when SelectById: %v", db.Error)
 	}
@@ -631,13 +631,13 @@ func TestInsertBaseDb(t *testing.T) {
 func TestInsertBatchBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	resultDb := gplus.InsertBatch[User](users, gplus.DbBaseName(gormDbConnName))
+	resultDb := gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
 	if resultDb.RowsAffected != int64(len(users)) {
 		t.Errorf("affected rows should be %v, but got %v", len(users), resultDb.RowsAffected)
 	}
 
 	for _, user := range users {
-		newUser, db := gplus.SelectById[User](user.ID, gplus.DbBaseName(gormDbConnName))
+		newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
 		if db.Error != nil {
 			t.Fatalf("errors happened when SelectById: %v", db.Error)
 		}
@@ -648,13 +648,13 @@ func TestInsertBatchBaseDb(t *testing.T) {
 func TestDeleteByIdBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	gplus.InsertBatchSize[User](users, 2, gplus.DbBaseName(gormDbConnName))
+	gplus.InsertBatchSize[User](users, 2, gplus.DbConnName(gormDbConnName))
 
-	if res := gplus.DeleteById[User](users[1].ID, gplus.DbBaseName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+	if res := gplus.DeleteById[User](users[1].ID, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
 		t.Errorf("errors happened when deleteById: %v, affected: %v", res.Error, res.RowsAffected)
 	}
 
-	_, resultDb := gplus.SelectById[User](users[1].ID, gplus.DbBaseName(gormDbConnName))
+	_, resultDb := gplus.SelectById[User](users[1].ID, gplus.DbConnName(gormDbConnName))
 	if !errors.Is(resultDb.Error, gorm.ErrRecordNotFound) {
 		t.Errorf("should returns record not found error, but got %v", resultDb.Error)
 	}
@@ -663,16 +663,16 @@ func TestDeleteByIdBaseDb(t *testing.T) {
 func TestDeleteBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	opt := gplus.DbBaseName(gormDbConnName)
+	opt := gplus.DbConnName(gormDbConnName)
 	gplus.InsertBatch[User](users, opt)
 
 	query, u := gplus.NewQueryBaseDb[User](opt)
 	query.Eq(&u.Username, "afumu1")
-	if res := gplus.Delete[User](query, gplus.DbBaseName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+	if res := gplus.Delete[User](query, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
 		t.Errorf("errors happened when Delete: %v, affected: %v", res.Error, res.RowsAffected)
 	}
 
-	_, resultDb := gplus.SelectOne[User](query, gplus.DbBaseName(gormDbConnName))
+	_, resultDb := gplus.SelectOne[User](query, gplus.DbConnName(gormDbConnName))
 	if !errors.Is(resultDb.Error, gorm.ErrRecordNotFound) {
 		t.Errorf("should returns record not found error, but got %v", resultDb.Error)
 	}
@@ -681,17 +681,17 @@ func TestDeleteBaseDb(t *testing.T) {
 func TestUpdateByIdBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	gplus.InsertBatch[User](users, gplus.DbBaseName(gormDbConnName))
+	gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
 
 	user := users[0]
 	user.Score = 100
 	user.Age = 25
 
-	if res := gplus.UpdateById[User](user, gplus.DbBaseName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+	if res := gplus.UpdateById[User](user, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
 		t.Errorf("errors happened when deleteByIds: %v, affected: %v", res.Error, res.RowsAffected)
 	}
 
-	newUser, db := gplus.SelectById[User](user.ID, gplus.DbBaseName(gormDbConnName))
+	newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
 	if db.Error != nil {
 		t.Fatalf("errors happened when SelectById: %v", db.Error)
 	}
@@ -702,9 +702,9 @@ func TestUpdateByIdBaseDb(t *testing.T) {
 func TestSelectByIdBaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	gplus.InsertBatch[User](users, gplus.DbBaseName(gormDbConnName))
+	gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
 	user := users[0]
-	resultUser, db := gplus.SelectById[User](user.ID, gplus.DbBaseName(gormDbConnName))
+	resultUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
 	if db.Error != nil {
 		t.Errorf("errors happened when selectById : %v", db.Error)
 	} else {
@@ -712,10 +712,10 @@ func TestSelectByIdBaseDb(t *testing.T) {
 	}
 }
 
-func TestSelectGeneric6BaseName(t *testing.T) {
+func TestSelectGeneric6BaseDb(t *testing.T) {
 	deleteOldDataBaseDb()
 	users := getUsers()
-	opt := gplus.DbBaseName(gormDbConnName)
+	opt := gplus.DbConnName(gormDbConnName)
 	gplus.InsertBatch[User](users, opt)
 	type UserVo struct {
 		Dept  string
@@ -752,7 +752,7 @@ func TestSelectGeneric6BaseName(t *testing.T) {
 }
 
 func TestQueryByIdBaseDb(t *testing.T) {
-	opt := gplus.DbBaseName(gormDbConnName)
+	opt := gplus.DbConnName(gormDbConnName)
 	values := url.Values{}
 	values["q"] = []string{"id=1"}
 	query := gplus.BuildQueryBaseDb[User](values, opt)
@@ -766,10 +766,10 @@ func deleteOldData() {
 }
 
 func deleteOldDataBaseDb() {
-	opt := gplus.DbBaseName(gormDbConnName)
+	opt := gplus.DbConnName(gormDbConnName)
 	q, u := gplus.NewQueryBaseDb[User](opt)
 	q.IsNotNull(&u.ID)
-	gplus.Delete(q, gplus.DbBaseName(gormDbConnName))
+	gplus.Delete(q, gplus.DbConnName(gormDbConnName))
 }
 
 func getUsers() []*User {

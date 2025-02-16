@@ -57,7 +57,7 @@ var builders = map[string]func(query *QueryCond[any], name string, value any){
 
 func BuildQuery[T any](queryParams url.Values) *QueryCond[T] {
 	dbConnName := getDefaultDbConnName()
-	return BuildQueryBaseDb[T](queryParams, DbBaseName(dbConnName))
+	return BuildQueryBaseDb[T](queryParams, DbConnName(dbConnName))
 }
 
 func BuildQueryBaseDb[T any](queryParams url.Values, opt OptionFunc) *QueryCond[T] {
