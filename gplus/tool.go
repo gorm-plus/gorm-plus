@@ -56,12 +56,8 @@ var builders = map[string]func(query *QueryCond[any], name string, value any){
 	"<":    lt,
 }
 
-func BuildQuery[T any](queryParams url.Values) *QueryCond[T] {
-	dbConnName := getDefaultDbConnName()
-	return BuildQueryBaseDb[T](queryParams, DbConnName(dbConnName))
-}
-
-func BuildQueryBaseDb[T any](queryParams url.Values, opt OptionFunc) *QueryCond[T] {
+func BuildQuery[T any](queryParams url.Values, opts ...OptionFunc) *QueryCond[T] {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 
 	columnCondMap, conditionMap, gcond := parseParams(queryParams)
 

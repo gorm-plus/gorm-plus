@@ -51,6 +51,16 @@ func InitDb(db *gorm.DB, dbConnName string) error {
 	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")
 }
 
+func InitDbMany(dic map[string]*gorm.DB) []error {
+	var errs []error
+	for k, v := range dic {
+		if err := InitDb(v, k); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
 // GetDb 获取数据库连接
 func GetDb(dbConnName string) (*gorm.DB, error) {
 	db, exists := globalDbMap[dbConnName]
@@ -70,12 +80,8 @@ type Page[T any] struct {
 
 type Dao[T any] struct{}
 
-func (dao Dao[T]) NewQuery() (*QueryCond[T], *T) {
-	return NewQuery[T]()
-}
-
-func (dao Dao[T]) NewQueryBaseDb(opt OptionFunc) (*QueryCond[T], *T) {
-	return NewQueryBaseDb[T](opt)
+func (dao Dao[T]) NewQuery(opts ...OptionFunc) (*QueryCond[T], *T) {
+	return NewQuery[T](opts...)
 }
 
 func NewPage[T any](current, size int) *Page[T] {
@@ -583,13 +589,17 @@ func getDefaultDbConnName() string {
 	return dbConnName
 }
 
-func getDefaultDbByOpt(opt OptionFunc) (*gorm.DB, string, error) {
-	option := getOneOption(opt)
+// 获取如果连接名为空则默认填充的option数据
+func getDefaultOptionInfo(opts ...OptionFunc) Option {
+	option := getOption(opts)
 	if len(option.DbConnName) == 0 {
-		option.DbConnName = getDefaultDbConnName()
+		option.DbConnName = getDefaultDbConnName() //兼容之前设计
 	}
-	db, err := GetDb(option.DbConnName)
-	return db, option.DbConnName, err
+	return option
+}
+
+func getDefaultDbByOpt(opt Option) (*gorm.DB, string, error) {
+	return getDefaultDbByName(opt.DbConnName)
 }
 
 func getDefaultDbByName(dbConnName string) (*gorm.DB, string, error) {

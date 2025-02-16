@@ -666,7 +666,7 @@ func TestDeleteBaseDb(t *testing.T) {
 	opt := gplus.DbConnName(gormDbConnName)
 	gplus.InsertBatch[User](users, opt)
 
-	query, u := gplus.NewQueryBaseDb[User](opt)
+	query, u := gplus.NewQuery[User](opt)
 	query.Eq(&u.Username, "afumu1")
 	if res := gplus.Delete[User](query, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
 		t.Errorf("errors happened when Delete: %v, affected: %v", res.Error, res.RowsAffected)
@@ -725,9 +725,9 @@ func TestSelectGeneric6BaseDb(t *testing.T) {
 	for _, user := range users {
 		userMap[user.Dept] += user.Score
 	}
-	//测试NewQueryBaseDb和GetModelBaseDb
-	query, u := gplus.NewQueryBaseDb[User](opt)
-	uvo := gplus.GetModelBaseDb[UserVo](opt)
+	//测试NewQuery和GetModel
+	query, u := gplus.NewQuery[User](opt)
+	uvo := gplus.GetModel[UserVo](opt)
 	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
 	UserVos, resultDb := gplus.SelectGeneric[User, []UserVo](query, opt)
 
@@ -742,12 +742,12 @@ func TestSelectGeneric6BaseDb(t *testing.T) {
 		}
 	}
 
-	//测试NewQueryModelBaseDb
+	//测试NewQueryModel
 	type UserV1 struct {
 		Name string
 		Age  int64
 	}
-	query, user, userV1 := gplus.NewQueryModelBaseDb[User, UserV1](opt)
+	query, user, userV1 := gplus.NewQueryModel[User, UserV1](opt)
 	query.Eq(&user.Username, "afumu").And(func(q *gplus.QueryCond[User]) {
 		q.Eq(&user.Address, "北京").Or().Eq(&user.Age, 20)
 	}).Select(gplus.As(&user.Username, &userV1.Name), &user.Age)
@@ -768,7 +768,7 @@ func TestQueryByIdBaseDb(t *testing.T) {
 	opt := gplus.DbConnName(gormDbConnName)
 	values := url.Values{}
 	values["q"] = []string{"id=1"}
-	query := gplus.BuildQueryBaseDb[User](values, opt)
+	query := gplus.BuildQuery[User](values, opt)
 	gplus.SelectList[User](query, opt)
 }
 
@@ -780,7 +780,7 @@ func deleteOldData() {
 
 func deleteOldDataBaseDb() {
 	opt := gplus.DbConnName(gormDbConnName)
-	q, u := gplus.NewQueryBaseDb[User](opt)
+	q, u := gplus.NewQuery[User](opt)
 	q.IsNotNull(&u.ID)
 	gplus.Delete(q, gplus.DbConnName(gormDbConnName))
 }

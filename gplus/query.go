@@ -46,13 +46,8 @@ func (q *QueryCond[T]) getSqlSegment() string {
 }
 
 // NewQuery 构建查询条件
-func NewQuery[T any]() (*QueryCond[T], *T) {
-	dbConnName := getDefaultDbConnName()
-	return NewQueryBaseDb[T](DbConnName(dbConnName))
-}
-
-// NewQueryBaseDb 构建查询条件
-func NewQueryBaseDb[T any](opt OptionFunc) (*QueryCond[T], *T) {
+func NewQuery[T any](opts ...OptionFunc) (*QueryCond[T], *T) {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	q := &QueryCond[T]{}
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
@@ -67,13 +62,8 @@ func NewQueryBaseDb[T any](opt OptionFunc) (*QueryCond[T], *T) {
 }
 
 // NewQueryModel 构建查询条件
-func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
-	dbConnName := getDefaultDbConnName() //兼容之前设计
-	return NewQueryModelBaseDb[T, R](DbConnName(dbConnName))
-}
-
-// NewQueryModelBaseDb 构建查询条件
-func NewQueryModelBaseDb[T any, R any](opt OptionFunc) (*QueryCond[T], *T, *R) {
+func NewQueryModel[T any, R any](opts ...OptionFunc) (*QueryCond[T], *T, *R) {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	q := &QueryCond[T]{}
 	var t *T
 	var r *R

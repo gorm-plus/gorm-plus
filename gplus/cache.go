@@ -31,7 +31,7 @@ var columnNameCache sync.Map
 var modelInstanceCache sync.Map
 
 // Cache 缓存实体对象所有的字段名
-func Cache(opt OptionFunc, models ...any) {
+func Cache(opt Option, models ...any) {
 	db, _, _ := getDefaultDbByOpt(opt)
 	for _, model := range models {
 		columnNameMap := getColumnNameMap(model, db.Config.NamingStrategy)
@@ -68,13 +68,8 @@ func getColumnNameMap(model any, namingStrategy schema.Namer) map[uintptr]string
 }
 
 // GetModel 获取
-func GetModel[T any]() *T {
-	dbConnName := getDefaultDbConnName()
-	return GetModelBaseDb[T](DbConnName(dbConnName))
-}
-
-// GetModelBaseDb 获取根据数据库连接名
-func GetModelBaseDb[T any](opt OptionFunc) *T {
+func GetModel[T any](opts ...OptionFunc) *T {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
 		m, isReal := model.(*T)
