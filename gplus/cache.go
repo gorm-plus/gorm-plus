@@ -106,7 +106,10 @@ func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, 
 	return result
 }
 
-// 解析字段名称 兼容多数据库切换
+// 解析字段名称 兼容多数据库切换,
+// 如果用户使用Option的GetDb而没有传数据库连接名这边获取的namingStrategy 是默认的一个可能会有问题，
+// 所以建议用户多数据库的时候弃用Option里的Db,并且重新改写初始化,给与每个db连接有连接名
+// 并且改造下多数据使用NewQuery和GetModel和NewQueryModel相关方法传入数据库连接名
 func parseColumnName(field reflect.StructField, namingStrategy schema.Namer) string {
 	tagSetting := schema.ParseTagSetting(field.Tag.Get("gorm"), ";")
 	name, ok := tagSetting["COLUMN"]

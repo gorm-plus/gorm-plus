@@ -63,7 +63,7 @@ func initDb() {
 	}
 	var u User
 	gormDb1.AutoMigrate(u)
-	gplus.InitDb(gormDb1, gormDbConnName)
+	gplus.Init(gormDb1, gormDbConnName)
 }
 
 func TestInsert(t *testing.T) {

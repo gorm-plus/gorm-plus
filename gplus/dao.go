@@ -33,28 +33,21 @@ var globalDbMap = make(map[string]*gorm.DB)
 var globalDbKeys []string
 var defaultBatchSize = 1000
 
-func Init(db *gorm.DB) {
-	InitDb(db, constants.DefaultGormPlusConnName)
+// Init 可选参数dbConnNameArr 代表数据库连接名,只需要传一个就行，
+// 主要为了兼容之前用户只传一个db无需修改
+func Init(db *gorm.DB, dbConnNameArr ...string) error {
+	var dbConnName = ""
+	if len(dbConnNameArr) > 0 {
+		dbConnName = dbConnNameArr[0]
+	}
+	return setGlobalInfo(db, dbConnName)
 }
 
-func InitDb(db *gorm.DB, dbConnName string) error {
-	if len(dbConnName) == 0 {
-		return errors.New("InitMultiple dbConnName is empty please check")
-	}
-	_, exists := globalDbMap[dbConnName]
-	if !exists {
-		// db instance register to global variable
-		globalDbMap[dbConnName] = db
-		globalDbKeys = append(globalDbKeys, dbConnName)
-		return nil
-	}
-	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")
-}
-
-func InitDbMany(dic map[string]*gorm.DB) []error {
+// InitMany 初始化多个
+func InitMany(dic map[string]*gorm.DB) []error {
 	var errs []error
 	for k, v := range dic {
-		if err := InitDb(v, k); err != nil {
+		if err := setGlobalInfo(v, k); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -516,12 +509,6 @@ func getOption(opts []OptionFunc) Option {
 	return config
 }
 
-func getOneOption(opt OptionFunc) Option {
-	var config Option
-	opt(&config)
-	return config
-}
-
 func setSelectIfNeed(option Option, db *gorm.DB) {
 	if len(option.Selects) > 0 {
 		var columnNames []string
@@ -608,4 +595,26 @@ func getDefaultDbByName(dbConnName string) (*gorm.DB, string, error) {
 	}
 	db, err := GetDb(dbConnName)
 	return db, dbConnName, err
+}
+
+func setGlobalInfo(db *gorm.DB, dbConnName string) error {
+	if len(dbConnName) == 0 {
+		//return errors.New("InitMultiple dbConnName is empty please check")
+		//如果字典里不包含了默认名则使用默认名，兼容之前单库
+		_, exists := globalDbMap[constants.DefaultGormPlusConnName]
+		if exists {
+			//根据db指针地址获取作为连接名,因为GORM 本身不提供直接获取数据库连接地址的方法，也不推荐使用反射来获取dsn
+			dbConnName = fmt.Sprintf("%p", db)
+		} else {
+			dbConnName = constants.DefaultGormPlusConnName
+		}
+	}
+	_, exists := globalDbMap[dbConnName]
+	if !exists {
+		// db instance register to global variable
+		globalDbMap[dbConnName] = db
+		globalDbKeys = append(globalDbKeys, dbConnName)
+		return nil
+	}
+	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")
 }
