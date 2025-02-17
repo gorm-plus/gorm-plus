@@ -18,6 +18,7 @@ package gplus
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/acmestack/gorm-plus/constants"
 	"gorm.io/gorm"
@@ -28,11 +29,38 @@ import (
 	"time"
 )
 
-var globalDb *gorm.DB
+var globalDbMap = make(map[string]*gorm.DB)
+var globalDbKeys []string
 var defaultBatchSize = 1000
 
-func Init(db *gorm.DB) {
-	globalDb = db
+// Init 可选参数dbConnNameArr 代表数据库连接名,只需要传一个就行，
+// 主要为了兼容之前用户只传一个db无需修改
+func Init(db *gorm.DB, dbConnNameArr ...string) error {
+	var dbConnName = ""
+	if len(dbConnNameArr) > 0 {
+		dbConnName = dbConnNameArr[0]
+	}
+	return setGlobalInfo(db, dbConnName)
+}
+
+// InitMany 初始化多个
+func InitMany(dic map[string]*gorm.DB) []error {
+	var errs []error
+	for k, v := range dic {
+		if err := setGlobalInfo(v, k); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
+// GetDb 获取数据库连接
+func GetDb(dbConnName string) (*gorm.DB, error) {
+	db, exists := globalDbMap[dbConnName]
+	if exists {
+		return db, nil
+	}
+	return nil, errors.New("MultipleDbChange not exists dbConn:" + dbConnName + ",please check")
 }
 
 type Page[T any] struct {
@@ -45,8 +73,8 @@ type Page[T any] struct {
 
 type Dao[T any] struct{}
 
-func (dao Dao[T]) NewQuery() (*QueryCond[T], *T) {
-	return NewQuery[T]()
+func (dao Dao[T]) NewQuery(opts ...OptionFunc) (*QueryCond[T], *T) {
+	return NewQuery[T](opts...)
 }
 
 func NewPage[T any](current, size int) *Page[T] {
@@ -157,7 +185,7 @@ func UpdateZeroById[T any](entity *T, opts ...OptionFunc) *gorm.DB {
 func updateAllIfNeed(entity any, opts []OptionFunc, db *gorm.DB) {
 	option := getOption(opts)
 	if len(option.Selects) == 0 {
-		columnNameMap := getColumnNameMap(entity)
+		columnNameMap := getColumnNameMap(entity, db.Config.NamingStrategy)
 		var columnNames []string
 		for _, columnName := range columnNameMap {
 			columnNames = append(columnNames, columnName)
@@ -449,13 +477,20 @@ func buildSqlAndArgs[T any](expressions []any, sqlBuilder *strings.Builder, quer
 }
 
 func getDb(opts ...OptionFunc) *gorm.DB {
+	var db *gorm.DB
 	option := getOption(opts)
-	// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
-	var db = globalDb.Clauses()
 
 	if option.Db != nil {
-		db = option.Db.Clauses()
+		db = option.Db
+	} else {
+		db, option.DbConnName, _ = getDefaultDbByName(option.DbConnName)
 	}
+
+	//设置session,如果需要子句仅在当前会话生效，先调用 Session()，再调用 Clauses()。
+	setSessionIfNeed(option, db)
+
+	// Clauses()目的是为了初始化Db，如果db已经被初始化了,会直接返回db
+	db = db.Clauses()
 
 	// 设置需要忽略的字段
 	setOmitIfNeed(option, db)
@@ -496,6 +531,12 @@ func setOmitIfNeed(option Option, db *gorm.DB) {
 	}
 }
 
+func setSessionIfNeed(option Option, db *gorm.DB) {
+	if option.DbSession != nil {
+		db.Session(option.DbSession)
+	}
+}
+
 func getPkColumnName[T any]() string {
 	var entity T
 	entityType := reflect.TypeOf(entity)
@@ -519,4 +560,61 @@ func getPkColumnName[T any]() string {
 		return constants.DefaultPrimaryName
 	}
 	return columnName
+}
+
+func getDefaultDbConnName() string {
+	dbConnName := constants.DefaultGormPlusConnName
+	//如果用户没传数据库连接名称,优先判断全局自定义的连接名是否存在，
+	//如果上面不存在其次从全局globalDbKeys里获取第一个连接名
+	//1.避免用户使用InitDb方法初始化数据库 自定义数据库连接名 ，然后方法里不传是哪个数据库连接名 则只能默认取第一条
+	//2.再混用单库Init取初始化，做方法兼容
+	_, exists := globalDbMap[dbConnName]
+	if exists {
+		return dbConnName
+	}
+	dbConnName = globalDbKeys[0]
+	return dbConnName
+}
+
+// 获取如果连接名为空则默认填充的option数据
+func getDefaultOptionInfo(opts ...OptionFunc) Option {
+	option := getOption(opts)
+	if len(option.DbConnName) == 0 {
+		option.DbConnName = getDefaultDbConnName() //兼容之前设计
+	}
+	return option
+}
+
+func getDefaultDbByOpt(opt Option) (*gorm.DB, string, error) {
+	return getDefaultDbByName(opt.DbConnName)
+}
+
+func getDefaultDbByName(dbConnName string) (*gorm.DB, string, error) {
+	if len(dbConnName) == 0 {
+		dbConnName = getDefaultDbConnName()
+	}
+	db, err := GetDb(dbConnName)
+	return db, dbConnName, err
+}
+
+func setGlobalInfo(db *gorm.DB, dbConnName string) error {
+	if len(dbConnName) == 0 {
+		//return errors.New("InitMultiple dbConnName is empty please check")
+		//如果字典里不包含了默认名则使用默认名，兼容之前单库
+		_, exists := globalDbMap[constants.DefaultGormPlusConnName]
+		if exists {
+			//根据db指针地址获取作为连接名,因为GORM 本身不提供直接获取数据库连接地址的方法，也不推荐使用反射来获取dsn
+			dbConnName = fmt.Sprintf("%p", db)
+		} else {
+			dbConnName = constants.DefaultGormPlusConnName
+		}
+	}
+	_, exists := globalDbMap[dbConnName]
+	if !exists {
+		// db instance register to global variable
+		globalDbMap[dbConnName] = db
+		globalDbKeys = append(globalDbKeys, dbConnName)
+		return nil
+	}
+	return errors.New("InitMultiple have same name:" + dbConnName + ",please check")
 }

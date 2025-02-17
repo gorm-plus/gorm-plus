@@ -24,6 +24,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"net/url"
 	"reflect"
 	"sort"
 	"strconv"
@@ -31,9 +32,13 @@ import (
 )
 
 var gormDb *gorm.DB
+var gormDbConnName = "test1"
+var dbAddress = "127.0.0.1:3306"
+var dbUser = "root"
+var dbPassword = "123456"
 
 func init() {
-	dsn := "root:123456@tcp(127.0.0.1:3306)/test?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/test?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbAddress)
 	var err error
 	gormDb, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -44,6 +49,21 @@ func init() {
 	var u User
 	gormDb.AutoMigrate(u)
 	gplus.Init(gormDb)
+	initDb()
+}
+
+func initDb() {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/test1?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbAddress)
+	var err error
+	gormDb1, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
+	if err != nil {
+		fmt.Println(err)
+	}
+	var u User
+	gormDb1.AutoMigrate(u)
+	gplus.Init(gormDb1, gormDbConnName)
 }
 
 func TestInsert(t *testing.T) {
@@ -589,10 +609,180 @@ func TestTx(t *testing.T) {
 	}
 }
 
+func TestInsertBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+
+	user := &User{Username: "afumu", Password: "123456", Age: 18, Score: 100, Dept: "开发部门"}
+	resultDb := gplus.Insert(user, gplus.DbConnName(gormDbConnName))
+
+	if resultDb.Error != nil {
+		t.Fatalf("errors happened when insert: %v", resultDb.Error)
+	} else if resultDb.RowsAffected != 1 {
+		t.Fatalf("rows affected expects: %v, got %v", 1, resultDb.RowsAffected)
+	}
+
+	newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
+	if db.Error != nil {
+		t.Fatalf("errors happened when SelectById: %v", db.Error)
+	}
+	AssertObjEqual(t, newUser, user, "ID", "Username", "Password", "Address", "Age", "Phone", "Score", "Dept", "CreatedAt", "UpdatedAt")
+}
+
+func TestInsertBatchBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	resultDb := gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
+	if resultDb.RowsAffected != int64(len(users)) {
+		t.Errorf("affected rows should be %v, but got %v", len(users), resultDb.RowsAffected)
+	}
+
+	for _, user := range users {
+		newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
+		if db.Error != nil {
+			t.Fatalf("errors happened when SelectById: %v", db.Error)
+		}
+		AssertObjEqual(t, newUser, user, "ID", "Username", "Password", "Address", "Age", "Phone", "Score", "Dept", "CreatedAt", "UpdatedAt")
+	}
+}
+
+func TestDeleteByIdBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	gplus.InsertBatchSize[User](users, 2, gplus.DbConnName(gormDbConnName))
+
+	if res := gplus.DeleteById[User](users[1].ID, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+		t.Errorf("errors happened when deleteById: %v, affected: %v", res.Error, res.RowsAffected)
+	}
+
+	_, resultDb := gplus.SelectById[User](users[1].ID, gplus.DbConnName(gormDbConnName))
+	if !errors.Is(resultDb.Error, gorm.ErrRecordNotFound) {
+		t.Errorf("should returns record not found error, but got %v", resultDb.Error)
+	}
+}
+
+func TestDeleteBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	opt := gplus.DbConnName(gormDbConnName)
+	gplus.InsertBatch[User](users, opt)
+
+	query, u := gplus.NewQuery[User](opt)
+	query.Eq(&u.Username, "afumu1")
+	if res := gplus.Delete[User](query, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+		t.Errorf("errors happened when Delete: %v, affected: %v", res.Error, res.RowsAffected)
+	}
+
+	_, resultDb := gplus.SelectOne[User](query, gplus.DbConnName(gormDbConnName))
+	if !errors.Is(resultDb.Error, gorm.ErrRecordNotFound) {
+		t.Errorf("should returns record not found error, but got %v", resultDb.Error)
+	}
+}
+
+func TestUpdateByIdBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
+
+	user := users[0]
+	user.Score = 100
+	user.Age = 25
+
+	if res := gplus.UpdateById[User](user, gplus.DbConnName(gormDbConnName)); res.Error != nil || res.RowsAffected != 1 {
+		t.Errorf("errors happened when deleteByIds: %v, affected: %v", res.Error, res.RowsAffected)
+	}
+
+	newUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
+	if db.Error != nil {
+		t.Fatalf("errors happened when SelectById: %v", db.Error)
+	}
+	AssertObjEqual(t, newUser, user, "ID", "Username", "Password", "Address", "Age", "Phone", "Score", "Dept", "CreatedAt", "UpdatedAt")
+
+}
+
+func TestSelectByIdBaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	gplus.InsertBatch[User](users, gplus.DbConnName(gormDbConnName))
+	user := users[0]
+	resultUser, db := gplus.SelectById[User](user.ID, gplus.DbConnName(gormDbConnName))
+	if db.Error != nil {
+		t.Errorf("errors happened when selectById : %v", db.Error)
+	} else {
+		AssertObjEqual(t, resultUser, user, "ID", "Username", "Password", "Address", "Age", "Phone", "Score", "Dept", "CreatedAt", "UpdatedAt")
+	}
+}
+
+func TestSelectGeneric6BaseDb(t *testing.T) {
+	deleteOldDataBaseDb()
+	users := getUsers()
+	opt := gplus.DbConnName(gormDbConnName)
+	gplus.InsertBatch[User](users, opt)
+	type UserVo struct {
+		Dept  string
+		Score int
+	}
+	var userMap = make(map[string]int)
+	for _, user := range users {
+		userMap[user.Dept] += user.Score
+	}
+	//测试NewQuery和GetModel
+	query, u := gplus.NewQuery[User](opt)
+	uvo := gplus.GetModel[UserVo](opt)
+	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
+	UserVos, resultDb := gplus.SelectGeneric[User, []UserVo](query, opt)
+
+	if resultDb.Error != nil {
+		t.Errorf("errors happened when resultDb : %v", resultDb.Error)
+	}
+
+	for _, userVo := range UserVos {
+		score := userMap[userVo.Dept]
+		if userVo.Score != score {
+			t.Errorf("errors happened when SelectGeneric")
+		}
+	}
+
+	//测试NewQueryModel
+	type UserV1 struct {
+		Name string
+		Age  int64
+	}
+	query, user, userV1 := gplus.NewQueryModel[User, UserV1](opt)
+	query.Eq(&user.Username, "afumu").And(func(q *gplus.QueryCond[User]) {
+		q.Eq(&user.Address, "北京").Or().Eq(&user.Age, 20)
+	}).Select(gplus.As(&user.Username, &userV1.Name), &user.Age)
+	gplus.SelectGeneric[User, []UserV1](query, opt)
+
+	//如果还是使用旧有的方法测试
+	query, u = gplus.NewQuery[User]()
+	uvo = gplus.GetModel[UserVo]()
+	query.Select(&u.Dept, gplus.Sum(&u.Score).As(&uvo.Score)).Group(&u.Dept)
+	UserVos, resultDb = gplus.SelectGeneric[User, []UserVo](query, opt)
+
+	if resultDb.Error != nil {
+		t.Errorf("errors happened when resultDb : %v", resultDb.Error)
+	}
+}
+
+func TestQueryByIdBaseDb(t *testing.T) {
+	opt := gplus.DbConnName(gormDbConnName)
+	values := url.Values{}
+	values["q"] = []string{"id=1"}
+	query := gplus.BuildQuery[User](values, opt)
+	gplus.SelectList[User](query, opt)
+}
+
 func deleteOldData() {
 	q, u := gplus.NewQuery[User]()
 	q.IsNotNull(&u.ID)
 	gplus.Delete(q)
+}
+
+func deleteOldDataBaseDb() {
+	opt := gplus.DbConnName(gormDbConnName)
+	q, u := gplus.NewQuery[User](opt)
+	q.IsNotNull(&u.ID)
+	gplus.Delete(q, gplus.DbConnName(gormDbConnName))
 }
 
 func getUsers() []*User {

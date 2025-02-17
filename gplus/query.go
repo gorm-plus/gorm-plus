@@ -46,7 +46,8 @@ func (q *QueryCond[T]) getSqlSegment() string {
 }
 
 // NewQuery 构建查询条件
-func NewQuery[T any]() (*QueryCond[T], *T) {
+func NewQuery[T any](opts ...OptionFunc) (*QueryCond[T], *T) {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	q := &QueryCond[T]{}
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
@@ -56,12 +57,13 @@ func NewQuery[T any]() (*QueryCond[T], *T) {
 		}
 	}
 	m := new(T)
-	Cache(m)
+	Cache(opt, m)
 	return q, m
 }
 
 // NewQueryModel 构建查询条件
-func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
+func NewQueryModel[T any, R any](opts ...OptionFunc) (*QueryCond[T], *T, *R) {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	q := &QueryCond[T]{}
 	var t *T
 	var r *R
@@ -83,12 +85,12 @@ func NewQueryModel[T any, R any]() (*QueryCond[T], *T, *R) {
 
 	if t == nil {
 		t = new(T)
-		Cache(t)
+		Cache(opt, t)
 	}
 
 	if r == nil {
 		r = new(R)
-		Cache(r)
+		Cache(opt, r)
 	}
 
 	return q, t, r

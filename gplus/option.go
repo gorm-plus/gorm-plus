@@ -17,13 +17,17 @@
 
 package gplus
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+)
 
 type Option struct {
 	Db          *gorm.DB
 	Selects     []any
 	Omits       []any
 	IgnoreTotal bool
+	DbConnName  string
+	DbSession   *gorm.Session
 }
 
 type OptionFunc func(*Option)
@@ -35,10 +39,10 @@ func Db(db *gorm.DB) OptionFunc {
 	}
 }
 
-// Session 创建回话
+// Session 创建会话
 func Session(session *gorm.Session) OptionFunc {
 	return func(o *Option) {
-		o.Db = globalDb.Session(session)
+		o.DbSession = session //调整session 在dao类的getDb方法那边处理
 	}
 }
 
@@ -60,5 +64,12 @@ func Omit(columns ...any) OptionFunc {
 func IgnoreTotal() OptionFunc {
 	return func(o *Option) {
 		o.IgnoreTotal = true
+	}
+}
+
+// DbConnName 多个数据库连接根据自定义连接名称选择切换
+func DbConnName(dbConnName string) OptionFunc {
+	return func(o *Option) {
+		o.DbConnName = dbConnName
 	}
 }

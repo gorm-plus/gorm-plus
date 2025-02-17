@@ -31,9 +31,10 @@ var columnNameCache sync.Map
 var modelInstanceCache sync.Map
 
 // Cache 缓存实体对象所有的字段名
-func Cache(models ...any) {
+func Cache(opt Option, models ...any) {
+	db, _, _ := getDefaultDbByOpt(opt)
 	for _, model := range models {
-		columnNameMap := getColumnNameMap(model)
+		columnNameMap := getColumnNameMap(model, db.Config.NamingStrategy)
 		for pointer, columnName := range columnNameMap {
 			columnNameCache.Store(pointer, columnName)
 		}
@@ -43,7 +44,7 @@ func Cache(models ...any) {
 	}
 }
 
-func getColumnNameMap(model any) map[uintptr]string {
+func getColumnNameMap(model any, namingStrategy schema.Namer) map[uintptr]string {
 	var columnNameMap = make(map[uintptr]string)
 	valueOf := reflect.ValueOf(model).Elem()
 	typeOf := reflect.TypeOf(model).Elem()
@@ -52,14 +53,14 @@ func getColumnNameMap(model any) map[uintptr]string {
 		// 如果当前实体嵌入了其他实体，同样需要缓存它的字段名
 		if field.Anonymous {
 			// 如果存在多重嵌套，通过递归方式获取他们的字段名
-			subFieldMap := getSubFieldColumnNameMap(valueOf, field)
+			subFieldMap := getSubFieldColumnNameMap(valueOf, field, namingStrategy)
 			for pointer, columnName := range subFieldMap {
 				columnNameMap[pointer] = columnName
 			}
 		} else {
 			// 获取对象字段指针值
 			pointer := valueOf.Field(i).Addr().Pointer()
-			columnName := parseColumnName(field)
+			columnName := parseColumnName(field, namingStrategy)
 			columnNameMap[pointer] = columnName
 		}
 	}
@@ -67,7 +68,8 @@ func getColumnNameMap(model any) map[uintptr]string {
 }
 
 // GetModel 获取
-func GetModel[T any]() *T {
+func GetModel[T any](opts ...OptionFunc) *T {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := modelInstanceCache.Load(modelTypeStr); ok {
 		m, isReal := model.(*T)
@@ -76,12 +78,12 @@ func GetModel[T any]() *T {
 		}
 	}
 	t := new(T)
-	Cache(t)
+	Cache(opt, t)
 	return t
 }
 
 // 递归获取嵌套字段名
-func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField) map[uintptr]string {
+func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField, namingStrategy schema.Namer) map[uintptr]string {
 	result := make(map[uintptr]string)
 	modelType := field.Type
 	if modelType.Kind() == reflect.Ptr {
@@ -90,13 +92,13 @@ func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField) 
 	for j := 0; j < modelType.NumField(); j++ {
 		subField := modelType.Field(j)
 		if subField.Anonymous {
-			nestedFields := getSubFieldColumnNameMap(valueOf, subField)
+			nestedFields := getSubFieldColumnNameMap(valueOf, subField, namingStrategy)
 			for key, value := range nestedFields {
 				result[key] = value
 			}
 		} else {
 			pointer := valueOf.FieldByName(modelType.Field(j).Name).Addr().Pointer()
-			name := parseColumnName(modelType.Field(j))
+			name := parseColumnName(modelType.Field(j), namingStrategy)
 			result[pointer] = name
 		}
 	}
@@ -104,14 +106,17 @@ func getSubFieldColumnNameMap(valueOf reflect.Value, field reflect.StructField) 
 	return result
 }
 
-// 解析字段名称
-func parseColumnName(field reflect.StructField) string {
+// 解析字段名称 兼容多数据库切换,
+// 如果用户使用Option的GetDb而没有传数据库连接名这边获取的namingStrategy 是默认的一个可能会有问题，
+// 所以建议用户多数据库的时候弃用Option里的Db,并且重新改写初始化,给与每个db连接有连接名
+// 并且改造下多数据使用NewQuery和GetModel和NewQueryModel相关方法传入数据库连接名
+func parseColumnName(field reflect.StructField, namingStrategy schema.Namer) string {
 	tagSetting := schema.ParseTagSetting(field.Tag.Get("gorm"), ";")
 	name, ok := tagSetting["COLUMN"]
 	if ok {
 		return name
 	}
-	return globalDb.Config.NamingStrategy.ColumnName("", field.Name)
+	return namingStrategy.ColumnName("", field.Name)
 }
 
 func getColumnName(v any) string {

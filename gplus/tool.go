@@ -19,6 +19,7 @@ package gplus
 
 import (
 	"fmt"
+	"gorm.io/gorm/schema"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -55,13 +56,16 @@ var builders = map[string]func(query *QueryCond[any], name string, value any){
 	"<":    lt,
 }
 
-func BuildQuery[T any](queryParams url.Values) *QueryCond[T] {
+func BuildQuery[T any](queryParams url.Values, opts ...OptionFunc) *QueryCond[T] {
+	opt := getDefaultOptionInfo(opts...) //兼容设计
 
 	columnCondMap, conditionMap, gcond := parseParams(queryParams)
 
 	parentQuery := buildParentQuery[T](conditionMap)
 
-	queryCondMap := buildQueryCondMap[T](columnCondMap)
+	db, _, _ := getDefaultDbByOpt(opt)
+
+	queryCondMap := buildQueryCondMap[T](columnCondMap, db.Config.NamingStrategy)
 
 	// 如果没有分组条件，直接返回默认的查询条件
 	if len(gcond) == 0 {
@@ -159,9 +163,9 @@ func getCurrentOp(value string) string {
 	return currentOperator
 }
 
-func buildQueryCondMap[T any](columnCondMap map[string][]*Condition) map[string]*QueryCond[T] {
+func buildQueryCondMap[T any](columnCondMap map[string][]*Condition, namingStrategy schema.Namer) map[string]*QueryCond[T] {
 	var queryCondMap = make(map[string]*QueryCond[T])
-	columnTypeMap := getColumnTypeMap[T]()
+	columnTypeMap := getColumnTypeMap[T](namingStrategy)
 	for key, conditions := range columnCondMap {
 		query := &QueryCond[any]{}
 		query.columnTypeMap = columnTypeMap
@@ -273,7 +277,7 @@ func buildGroupQuery[T any](gcond string, queryMaps map[string]*QueryCond[T], qu
 	return query
 }
 
-func getColumnTypeMap[T any]() map[string]reflect.Type {
+func getColumnTypeMap[T any](namingStrategy schema.Namer) map[string]reflect.Type {
 	modelTypeStr := reflect.TypeOf((*T)(nil)).Elem().String()
 	if model, ok := columnTypeCache.Load(modelTypeStr); ok {
 		if columnNameMap, isOk := model.(map[string]reflect.Type); isOk {
@@ -285,19 +289,19 @@ func getColumnTypeMap[T any]() map[string]reflect.Type {
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := typeOf.Field(i)
 		if field.Anonymous {
-			nestedFields := getSubFieldColumnTypeMap(field)
+			nestedFields := getSubFieldColumnTypeMap(field, namingStrategy)
 			for key, value := range nestedFields {
 				columnTypeMap[key] = value
 			}
 		}
-		columnName := parseColumnName(field)
+		columnName := parseColumnName(field, namingStrategy)
 		columnTypeMap[columnName] = field.Type
 	}
 	columnTypeCache.Store(modelTypeStr, columnTypeMap)
 	return columnTypeMap
 }
 
-func getSubFieldColumnTypeMap(field reflect.StructField) map[string]reflect.Type {
+func getSubFieldColumnTypeMap(field reflect.StructField, namingStrategy schema.Namer) map[string]reflect.Type {
 	columnTypeMap := make(map[string]reflect.Type)
 	modelType := field.Type
 	if modelType.Kind() == reflect.Ptr {
@@ -306,12 +310,12 @@ func getSubFieldColumnTypeMap(field reflect.StructField) map[string]reflect.Type
 	for j := 0; j < modelType.NumField(); j++ {
 		subField := modelType.Field(j)
 		if subField.Anonymous {
-			nestedFields := getSubFieldColumnTypeMap(subField)
+			nestedFields := getSubFieldColumnTypeMap(subField, namingStrategy)
 			for key, value := range nestedFields {
 				columnTypeMap[key] = value
 			}
 		} else {
-			columnName := parseColumnName(subField)
+			columnName := parseColumnName(subField, namingStrategy)
 			columnTypeMap[columnName] = subField.Type
 		}
 	}
